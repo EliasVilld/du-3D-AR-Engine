@@ -1,9 +1,9 @@
 # DU 3D AR Engine
 ## What is this repo ?
-An open-source project in Dual Universe, to implement a 3D engine in Lua destined to be used in Augmented Reality in the game.
-It's work in progress.
+An open-source project in the Dual Universe, to implement a 3D engine in Lua to be used in Augmented Reality in the game.
+This is a work in progress.
 
-### Reminder : It's work in progress, so obvisouly there is a lot of obviosu optimizations remaining and some works to do ^^'.
+### Reminder :  This is a work in progress, so there are obviously a lot of obvious optimisations and some work to do ^^'.
 
 ## Last screenshot
 ![screenshot1](Images/screenshot1.jpg)
