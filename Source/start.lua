@@ -4,7 +4,7 @@
 mesh = {
     size = {8,6,12},
     -- X | Y | Z
-    vert = {
+    vertices = {
         {-0.5,-0.5,-0.5,-0.5,0.5,0.5,0.5,0.5},
         {-0.5,-0.5,0.5,0.5,-0.5,-0.5,0.5,0.5},
         {-0.5,0.5,-0.5,0.5,-0.5,0.5,-0.5,0.5}
@@ -16,7 +16,7 @@ mesh = {
         { 0.0, 0.0, 0.0, 0.0,-1.0, 1.0},
         {   0,   0,   0,   0,   0,   0,}
     },
-    -- R | G | B
+    lines = {},
     colors = {
         {  0,  0,250},
         {  0,125,125},
@@ -42,9 +42,23 @@ mesh = {
     }
 }
 
+--[[local vX, vY, vZ = mesh.vertices[1], mesh.vertices[2], mesh.vertices[3]
+for i = 1, 32 do
+    local d = math.pi/64
+    local id = #vX+1
+    
+    vX[id] = math.cos(d)
+    vY[id] = math.sin(d)
+    vZ[id] = 0
+    
+    mesh.lines[#mesh.lines+1] = {id, i == 32 and id-31 or id+1}
+end]]
+
 --Set model global
+local sV, sN, sV = #mesh.vertices[1],#mesh.normals[1],#mesh.faces
 _model = {
-    vert = {
+    size = {sV, sN, sV},
+    vertices = {
         {},
         {},
         {}
@@ -55,10 +69,38 @@ _model = {
         {},
         {}
     },
+    lines = {},
     faces = {}
 }
 
+-- Define global parameters
+_width = system.getScreenWidth()
+_height = system.getScreenHeight()
+_vFov = system.getCameraVerticalFov()
+
+system.print(string.format('Horizontal fov : %.16f',system.getCameraHorizontalFov()))
+system.print(string.format('Vertical fov : %.16f',_vFov))
+system.print(string.format('Width: %.2f',_width))
+system.print(string.format('Height: %.2f',_height))
+
+_near = 0.01
+_far = 1000.0
+
+_aspectRatio = _height/_width
+_tanFov = 1.0/math.tan(math.rad(_vFov)*0.5)
+_field = -_far/(_far-_near)
+
 --Set the computation tick
 unit.setTimer('compute', 0.001)
-system.showHelper(0)
 system.showScreen(1)
+
+_logs = {
+    ['Computed Normals'] = {},
+    ['Computed Faces'] = {},
+    ['Computed Vertices'] = {},
+    ['Computation Time'] = {},
+    ['Computation Memory Use'] = {},
+    ['Rendering Compose Time'] = {},
+    ['Concat Time'] = {},
+    ['SVG Render Time'] = {}
+}
