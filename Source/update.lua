@@ -2,13 +2,24 @@
 --==================================================
 if not _model then return end
 
+local logRenderTime = _logs['Rendering Compose Time']
+local logConcatTime = _logs['Concat Time']
+local logSVGTime = _logs['SVG Render Time']
+
+local t0 = system.getTime()
+
 local width = system.getScreenWidth()
 local height = system.getScreenHeight()
 
 local w2, h2 = width*0.5, height*0.5
 
-local X, Y = _model.vert[1], _model.vert[2]
-local result, j = {string.format([[<style>svg { shape-rendering: optimizeSpeed; background:none } text { font: bold 14px sans-serif; text-anchor:middle} path{ stroke:currentColor; fill:currentColor; stroke-width:1; stroke-linecap:butt }</style><svg style="position: absolute; left:0px; top:0px" viewBox="0 0 %.1f %.1f" >]], width, height)}, 1
+local X, Y = _model.vertices[1], _model.vertices[2]
+local result = {string.format([[<style>
+        #render { shape-rendering: optimizeSpeed; background:none }
+        #render text { font: bold 14px sans-serif; text-anchor:middle}
+        #render path{ stroke:currentColor; fill:currentColor; stroke-width:1; stroke-linecap:butt }
+        </style>
+        <svg id="render" style="position: absolute; left:0px; top:0px" viewBox="0 0 %.1f %.1f" >]], width, height)}
 
 local index = 2
 for i,face in pairs(_model.faces) do
@@ -36,6 +47,24 @@ for i,face in pairs(_model.faces) do
     index = index+1
 end
 
+
+
+
 result[index] = '</svg>'
 
-system.setScreen(table.concat(result))
+logRenderTime[#logRenderTime +1] = system.getTime() - t0
+t0 = system.getTime()
+
+local out = _logRender .. table.concat(result)
+
+logConcatTime[#logConcatTime +1] = system.getTime() - t0
+t0 = system.getTime()
+
+system.setScreen(out)
+
+logSVGTime[#logSVGTime +1] = system.getTime() - t0
+
+
+if #logRenderTime > 200 then table.remove(logRenderTime, 1) end
+if #logConcatTime > 200 then table.remove(logConcatTime, 1) end
+if #logSVGTime > 200 then table.remove(logSVGTime, 1) end
