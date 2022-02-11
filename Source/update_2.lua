@@ -1,5 +1,6 @@
 -- To place in a second update filter
 --==================================================
+
 local logCompTime = _logs['Computation Time']
 local logCompMem = _logs['Computation Memory Use']
 local logRenderTime = _logs['Rendering Compose Time']
@@ -9,7 +10,7 @@ local height = system.getScreenHeight()
 
 local result, index = {
     string.format([[<style>#debug { shape-rendering: optimizeSpeed; background:none } #debug text { fill:#fff; stroke:#000; font: 12px sans-serif} #debug text.m{text-anchor:middle} #debug text.r{text-anchor:end} #debug text.big{ font: 18px sans-serif} #debug path{ stroke:currentColor; fill:none; stroke-width:1; stroke-linecap:butt }</style><svg id="debug" style="position: absolute; left:0px; top:0px" viewBox="0 0 %.1f %.1f" >]], width, height),
-    [[<text x=10 y=14 >v0.14</text>]]
+    [[<text x=10 y=14 >v0.16</text>]]
 }, 2
 
 --Computation time
@@ -38,7 +39,7 @@ index = index +8
 for i=1, #logCompTime do
     local v = logCompTime[i]
 
-    result[index+i] = string.format('%.1f %.1f' .. (i < #logCompTime and 'L' or ''), 10+i, 94 - (v/0.00025)*40)
+    result[index+i] = string.format('%.1f %.1f' .. (i < #logCompTime and 'L' or ''), 10+i, 94 - (v/0.0005)*40)
 end
 result[#result+1] = [["/></g>]]
 index = index +#logCompTime +1
@@ -57,7 +58,7 @@ avg = avg/#logCompMem
 local delta = max-min
 
 result[index+1] = [[<g transform="translate(10,120)"><rect x=0 y=0 width=220 height=94 fill=rgba(0,0,0,0.2) />]]
-result[index+2] = [[<text x=10 y=16 >Computation Memory Use</text>]]
+result[index+2] = [[<text x=10 y=16 >Memory Use</text>]]
 result[index+3] = [[<text x=20 y=32 >min</text>]]
 result[index+4] = [[<text x=70 y=32 >max</text>]]
 result[index+5] = string.format([[<text x=20 y=48 >%.1f</text>]], min)
@@ -70,7 +71,7 @@ index = index +8
 for i=1, #logCompMem do
     local v = logCompMem[i]
 
-    result[index+i] = string.format('%.1f %.1f' .. (i < #logCompMem and 'L' or ''), 10+i, 94 - (v/2000)*40)
+    result[index+i] = string.format('%.1f %.1f' .. (i < #logCompMem and 'L' or ''), 10+i, 94 - (v/4000)*40)
 end
 result[#result+1] = [["/></g>]]
 index = index +#logCompMem +1
@@ -102,11 +103,17 @@ index = index +8
 for i=1, #logRenderTime do
     local v = logRenderTime[i]
 
-    result[index+i] = string.format('%.1f %.1f' .. (i < #logRenderTime and 'L' or ''), 10+i, 94 - (v/0.0001)*40)
+    result[index+i] = string.format('%.1f %.1f' .. (i < #logRenderTime and 'L' or ''), 10+i, 94 - (v/0.0004)*40)
 end
 result[#result+1] = [["/></g>]]
 index = index +#logRenderTime +1
 
+
+-- Statistics
+result[index+1] = [[<g transform="translate(10,320)"><rect x=0 y=0 width=220 height=94 fill=rgba(0,0,0,0.2) />]]
+result[index+2] = [[<text x=10 y=16 >Statistics</text>]]
+result[index+3] = [[<text x=20 y=32 >Vertices</text>]]
+result[index+4] = string.format([[<text class="r" x=200 y=32 >%d/%d</text>]], #_model.vertices[1], #mesh.vertices[1])
 
 
 result[#result+1] = '</svg>'
