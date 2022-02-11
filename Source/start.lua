@@ -16,7 +16,6 @@ mesh = {
         { 0.0, 0.0, 0.0, 0.0,-1.0, 1.0},
         {   0,   0,   0,   0,   0,   0,}
     },
-    lines = {},
     colors = {
         {  0,  0,250},
         {  0,125,125},
@@ -26,38 +25,45 @@ mesh = {
         {125,  0,125}
     },
     -- VERTICES IDS | NORMAL ID
-    faces = {
-        {{ 2, 3, 1}, 1},
-        {{ 4, 7, 3}, 2},
-        {{ 8, 5, 7}, 3},
-        {{ 6, 1, 5}, 4},
-        {{ 7, 1, 3}, 5},
-        {{ 4, 6, 8}, 6},
-        {{ 2, 4, 3}, 1},
-        {{ 4, 8, 7}, 2},
-        {{ 8, 6, 5}, 3},
-        {{ 6, 2, 1}, 4},
-        {{ 7, 5, 1}, 5},
-        {{ 4, 2, 6}, 6}
+    shapes = {
+        {
+            { 2, 3, 1},
+            { 4, 7, 3},
+            { 8, 5, 7},
+            { 6, 1, 5},
+            { 7, 1, 3},
+            { 4, 6, 8},
+            { 2, 4, 3},
+            { 4, 8, 7},
+            { 8, 6, 5},
+            { 6, 2, 1},
+            { 7, 5, 1},
+            { 4, 2, 6}
+        },
+        {1,2,3,4,5,6,1,2,3,4,5,6}
     }
 }
 
---[[local vX, vY, vZ = mesh.vertices[1], mesh.vertices[2], mesh.vertices[3]
-for i = 1, 32 do
-    local d = math.pi/64
+--Generate a wavy circle line
+_steps = 32
+local vX, vY, vZ = mesh.vertices[1], mesh.vertices[2], mesh.vertices[3]
+local sV, sN = mesh.shapes[1], mesh.shapes[2]
+for i = 1, _steps do
+    local d = i*(2*math.pi)/_steps
     local id = #vX+1
     
     vX[id] = math.cos(d)
     vY[id] = math.sin(d)
-    vZ[id] = 0
+    vZ[id] = 0.25*math.sin(2*d)
     
-    mesh.lines[#mesh.lines+1] = {id, i == 32 and id-31 or id+1}
-end]]
+    sV[#sV+1] = {id, i == _steps and id-(_steps-1) or id+1}
+    sN[#sN+1] = nil
+end
 
 --Set model global
-local sV, sN, sV = #mesh.vertices[1],#mesh.normals[1],#mesh.faces
+local sV, sN, sS = #mesh.vertices[1],#mesh.normals[1],#mesh.shapes
 _model = {
-    size = {sV, sN, sV},
+    size = {sV, sN, sS},
     vertices = {
         {},
         {},
@@ -69,8 +75,14 @@ _model = {
         {},
         {}
     },
-    lines = {},
-    faces = {}
+    shapes = {
+        {},
+        {},
+        {},
+        {}
+    },
+    buffer = {},
+    depth = {}
 }
 
 -- Define global parameters
@@ -78,29 +90,26 @@ _width = system.getScreenWidth()
 _height = system.getScreenHeight()
 _vFov = system.getCameraVerticalFov()
 
-system.print(string.format('Horizontal fov : %.16f',system.getCameraHorizontalFov()))
-system.print(string.format('Vertical fov : %.16f',_vFov))
-system.print(string.format('Width: %.2f',_width))
-system.print(string.format('Height: %.2f',_height))
-
 _near = 0.01
 _far = 1000.0
-
+-- To recompute on regular time
 _aspectRatio = _height/_width
 _tanFov = 1.0/math.tan(math.rad(_vFov)*0.5)
 _field = -_far/(_far-_near)
 
 --Set the computation tick
 unit.setTimer('compute', 0.001)
+system.showHelper(0)
 system.showScreen(1)
 
 _logs = {
     ['Computed Normals'] = {},
     ['Computed Faces'] = {},
-    ['Computed Vertices'] = {},
     ['Computation Time'] = {},
     ['Computation Memory Use'] = {},
     ['Rendering Compose Time'] = {},
     ['Concat Time'] = {},
-    ['SVG Render Time'] = {}
+    ['SVG Render Time'] = {},
+    ['Computed Lines'] = {}
 }
+_logCompVertices = 0
