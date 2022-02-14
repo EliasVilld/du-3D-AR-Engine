@@ -6,7 +6,7 @@ This is a work in progress.
 ### Reminder :  This is a work in progress, so there are obviously a lot of obvious optimisations and some work to do ^^'.
 
 ## Last screenshot
-![screenshot3](Images/screenshot3.jpg)
+![screenshot4](Images/screenshot4.jpg)
 
 ## Changelog
 ### v0.06 [02/10]
