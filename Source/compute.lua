@@ -1,19 +1,15 @@
 -- To place in a tick event with a timerId "compute"
 --==================================================
-local logCompTime = _logs['Computation Time']
-local logCompMem = _logs['Computation Memory Use']
 
 -- Localisation
 local cos, sin, tan = math.cos, math.sin, math.tan
 local deg, rad = math.deg, math.rad
-local sort, remove, garbageCount = table.sort, table.remove, collectgarbage
-
 local getCamPos, getTime = system.getCameraPos, system.getTime
 local getCamFwd, getCamRgt, getCamUp = system.getCameraForward, system.getCameraRight, system.getCameraUp
 
--- Get screen data
 local t0 = getTime()
 
+-- Get screen data
 local width = _width
 local height = _height
 local vFov = _vFov
@@ -36,11 +32,12 @@ local camUpX, camUpY, camUpZ = up[1], up[2], up[3]
 -- Set mesh properties
 local yaw, pitch, roll = 0, 0, 0
 local oX, oY, oZ = -0.125, 11.875, -0.125
+local scale = 10
 
 -- Set model
-local nMX, nMY, nMZ = mesh.normals[1], mesh.normals[2], mesh.normals[3]
-local vMX, vMY, vMZ = mesh.vertices[1], mesh.vertices[2], mesh.vertices[3]
-local sMV, sMN = mesh.shapes[1], mesh.shapes[2]
+local nMX, nMY, nMZ = _mesh.normals[1], _mesh.normals[2], _mesh.normals[3]
+local vMX, vMY, vMZ = _mesh.vertices[1], _mesh.vertices[2], _mesh.vertices[3]
+local sMV, sMN = _mesh.shapes[1], _mesh.shapes[2]
 
 local nN, nS = #nMX,#sMV
 _model = {
@@ -52,10 +49,10 @@ _model = {
     normals = {
         {},
         {},
-        {},
         {}
     },
     shapes = {
+        {},
         {},
         {},
         {}
@@ -64,8 +61,8 @@ _model = {
     depth = {}
 }
 local vX, vY, vZ = _model.vertices[1], _model.vertices[2], _model.vertices[3]
-local nX, nY, nZ, nDot = _model.normals[1], _model.normals[2], _model.normals[3], _model.normals[4]
-local sV, sN, sC = _model.shapes[1], _model.shapes[2], _model.shapes[3]
+local nX, nY, nZ = _model.normals[1], _model.normals[2], _model.normals[3]
+local sV, sN, sC, sDot = _model.shapes[1], _model.shapes[2], _model.shapes[3], _model.shapes[4]
 local B, D = _model.buffer, _model.depth
 
 -- Precompute cos and sin
@@ -84,7 +81,17 @@ local dX, dY, dZ = oX - camX, oY - camY, oZ - camZ
 local Mxx, Myx, Mzx, Mwx =              cycp*camRgtX + sycp*camFwdX + (-sp)*camUpX,              cycp*camRgtY + sycp*camFwdY + (-sp)*camUpY,              cycp*camRgtZ + sycp*camFwdZ + (-sp)*camUpZ, dX*camRgtX + dY*camRgtY + dZ*camRgtZ
 local Mxy, Myy, Mzy, Mwy = cyspsr_sycr*camRgtX + syspsr_cycr*camFwdX + cpsr*camUpX, cyspsr_sycr*camRgtY + syspsr_cycr*camFwdY + cpsr*camUpY, cyspsr_sycr*camRgtZ + syspsr_cycr*camFwdZ + cpsr*camUpZ, dX*camFwdX + dY*camFwdY + dZ*camFwdZ
 local Mxz, Myz, Mzz, Mwz = cyspcr_sysr*camRgtX + syspcr_cysr*camFwdX + cpcr*camUpX, cyspcr_sysr*camRgtY + syspcr_cysr*camFwdY + cpcr*camUpY, cyspcr_sysr*camRgtZ + syspcr_cysr*camFwdZ + cpcr*camUpZ,    dX*camUpX + dY*camUpY + dZ*camUpZ
+local Mxw, Myw, Mzw, Mww = 0, 0, 0, 1
 
+local MVxx, MVyx, MVzx, MVwx =      af*Mxx,      af*Myx,      af*Mzx,          af*Mwx
+local MVxy, MVyy, MVzy, MVwy = -tanFov*Mxz, -tanFov*Myz, -tanFov*Mzz,     -tanFov*Mwz
+local MVxz, MVyz, MVzz, MVwz =  -field*Mxy,  -field*Mxy,  -field*Mxy, -field*Mxy + nq
+local MVxw, MVyw, MVzw, MVww =         Mxz,         Myz,         Mzz,             Mwz
+
+local MCVxx, MCVyx, MCVzx, MCVwx =     af*camRgtX,     af*camRgtY,     af*camRgtZ,   0
+local MCVxy, MCVyy, MCVzy, MCVwy = -tanFov*camUpX, -tanFov*camUpY, -tanFov*camUpZ,   0
+local MCVxz, MCVyz, MCVzz, MCVwz = -field*camFwdX, -field*camFwdY, -field*camFwdZ,  nq
+local MCVxw, MCVyw, MCVzw, MCVww =         camUpX,         camUpY,         camUpZ,   0
 
 -- Compute normals
 for i=1,nN do
@@ -94,111 +101,112 @@ for i=1,nN do
     nX[i] = nx*cycp + ny*sycp + nz*(-sp)
     nY[i] = nx*cyspsr_sycr + ny*syspsr_cycr + nz*cpsr
     nZ[i] = nx*cyspcr_sysr + ny*syspcr_cysr + nz*cpcr
-    nDot[i] = nil
 end
 
 
 -- Compute vertices
 local shapeId = 1
+_vertexId = 0
 
+
+local vx, vy, vz = 0, 0, 0 
 for i = 1,nS do
     local depth, dot = 0, 0
-    local vIds, nId, vId = sMV[i], sMN[i], -1
+    local vIds, nId = sMV[i], sMN[i]
     local index, maxIndex = 1, #vIds
-    local iMaxIndex = 1/maxIndex
 
     --# Compute the first vertice position for back-face culling
-    if nId then
-        id = vIds[index]
+    if nId then        
+        local id = vIds[index]
 
         --Local rotations YAW, PITCH, ROLL & positionning
-        local vxT, vyT, vzT = vMX[id], vMY[id], vMZ[id]
-        vx = vxT*cycp + vyT*sycp + vzT*(-sp) + dX
-        vy = vxT*cyspsr_sycr + vyT*syspsr_cycr + vzT*cpsr + dY
-        vz = vxT*cyspcr_sysr + vyT*syspcr_cysr + vzT*cpcr + dZ
+        local vxT, vyT, vzT = vMX[id]*scale, vMY[id]*scale, vMZ[id]*scale
+        
+        local vx = vxT*cycp + vyT*sycp + vzT*(-sp) + dX
+        local vy = vxT*cyspsr_sycr + vyT*syspsr_cycr + vzT*cpsr + dY
+        local vz = vxT*cyspcr_sysr + vyT*syspcr_cysr + vzT*cpcr + dZ
 
         -- Compute dot product with normal
-        dot = nDot[nId]
-        if not dot then
-            local len = (vx*vx+vy*vy+vz*vz)^(-0.5)
-            dot = vx*len*nMX[nId] + vy*len*nMY[nId] + vz*len*nMZ[nId]
-            nDot[nId] = dot
-        end
+        local len = (vx*vx+vy*vy+vz*vz)^(-0.5)
+        dot = vx*len*nMX[nId] + vy*len*nMY[nId] + vz*len*nMZ[nId]
+        sDot[nId] = dot
 
         if dot >= 0 then goto skipShape end
 
-        --Project camera referential
-        vxT, vyT, vzT = vx, vy, vz
-        
-        vx = vxT * camRgtX + vyT * camRgtY + vzT * camRgtZ
-        vy = vxT * camFwdX + vyT * camFwdY + vzT * camFwdZ
-        vz = vxT *  camUpX + vyT *  camUpY + vzT *  camUpZ
+        if vX[id] then
+            vz = vZ[id]
+        else
+            --Project camera referential
+            vxT, vyT, vzT = vx, vy, vz
 
-        if vy < 0.01 then goto skipShape end
-
-        --Project vertice from 3D -> 2D
-        local ivy = 1/vy
-
-        vX[id] = (af * vx)*ivy
-        vY[id] = ( -tanFov * vz)*ivy            
-        vz = ( -field * vy + nq)*ivy
-        vZ[id] = vz
+            vy = vxT * camFwdX + vyT * camFwdY + vzT * camFwdZ
+            if vy < 0.01 then goto skipShape end
+            local ivy = 1/vy
+            
+            --Project vertice from 3D -> 2D
+            --Matrix Proj.View
+            vX[id] = (vxT * MCVxx + vyT * MCVyx + vzT * MCVzx + MCVwx)*ivy 
+            vY[id] = (vxT * MCVxy + vyT * MCVyy + vzT * MCVzy + MCVwy)*ivy 
+            vz = (vxT * MCVxz + vyT * MCVyz + vzT * MCVzz + MCVwz)*ivy 
+            vZ[id] = vz
+            
+            _vertexId = _vertexId +1
+        end
 
         depth = depth + vz
-
         index = 2
     end
 
     for j=index,maxIndex do
-        id = vIds[j]
+        local id = vIds[j]
 
         if vX[id] then
             vz = vZ[id]
         else
             --Compute this vertice
-            vx, vy, vz = vMX[id], vMY[id], vMZ[id]
-
-            --Local rotations YAW, PITCH, ROLL & Positionning & Projection to camera            
+            vx, vy, vz = vMX[id]*scale, vMY[id]*scale, vMZ[id]*scale
             local vxT, vyT, vzT = vx, vy, vz
-            vx = vxT * Mxx + vyT * Myx + vzT * Mzx + Mwx 
-            vy = vxT * Mxy + vyT * Myy + vzT * Mzy + Mwy 
-            vz = vxT * Mxz + vyT * Myz + vzT * Mzz + Mwz 
-
+            
+            --Local rotations YAW, PITCH, ROLL & Positionning & Projection to camera 
+            --Matrix View.Trans
+            vy = vxT * Mxy + vyT * Myy + vzT * Mzy + Mwy
             if vy < 0.01 then goto skipShape end
 
             --Project vertice from 3D -> 2D
+            --Matrix Proj.View  
             local ivy = 1/vy
-
-            vX[id] = (af * vx)*ivy
-            vY[id] = ( -tanFov * vz)*ivy            
-            vz = ( -field * vy + nq)*ivy
+            
+            vX[id] = (vxT * MVxx + vyT * MVyx + vzT * MVzx + MVwx)*ivy 
+            vY[id] = (vxT * MVxy + vyT * MVyy + vzT * MVzy + MVwy)*ivy 
+            vz = (vxT * MVxz + vyT * MVyz + vzT * MVzz + MVwz)*ivy 
             vZ[id] = vz
+            
+            _vertexId = _vertexId +1            
         end
 
         depth = depth + vz
     end
+    
+    local col = _mesh.colors[nId]
+    if not col then col = {180,40,40} end
 
-    if depth >= 0 then
-        depth = depth*iMaxIndex
+    sV[shapeId] = vIds
+    sN[shapeId] = nId
+    sC[shapeId] = {
+            col[1] + 40*(0.5-dot),
+            col[2] + 40*(0.5-dot),
+            col[3] + 40*(0.5-dot)
+        }
 
-        sV[shapeId] = vIds
-        sN[shapeId] = nId
-        sC[shapeId] = mesh.colors[nId] or {180, 180, 180}
-
-        D[shapeId] = depth
-        B[depth] = shapeId
-        shapeId = shapeId+1
-    end
+    local iMaxIndex = 1/maxIndex
+    depth = depth*iMaxIndex
+    D[shapeId] = depth
+    B[depth] = shapeId
+    shapeId = shapeId+1
 
     ::skipShape::
 end
 
+local sort = table.sort
 sort(D)
-
-system.print(#_model.vertices[1])
-
-logCompTime[#logCompTime+1] = getTime() - t0
-logCompMem[#logCompMem+1] = garbageCount("count")
-
-if #logCompTime > 200 then remove(logCompTime, 1) end
-if #logCompMem > 200 then remove(logCompMem, 1) end
+_compTime = getTime() - t0
