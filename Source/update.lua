@@ -2,32 +2,38 @@
 --==================================================
 if not _model then return end
 
-local logRenderTime = _logs['Rendering Compose Time']
-local logConcatTime = _logs['Concat Time']
-local logSVGTime = _logs['SVG Render Time']
-
-local format, concat = string.format, table.concat
-
 local t0 = system.getTime()
+local memory = collectgarbage("count")
+local fps = 1/(t0-_fpsTime)
+_fpsTime = t0
 
-local width = system.getScreenWidth()
-local height = system.getScreenHeight()
+--=============================
+local format, concat, remove = string.format, table.concat, table.remove
 
+local width, height = _width, _height
 local w2, h2 = width*0.5, height*0.5
 
+local index, pattern = 2, ''
 local X, Y = _model.vertices[1], _model.vertices[2]
-local result = {format([[<style>
-        #render { shape-rendering: optimizeSpeed; background:none }
-        #render text { font: bold 14px sans-serif; text-anchor:middle}
-        #render path{ stroke:currentColor; fill:none; stroke-width:1; stroke-linecap:butt }
-        #render polygon{ stroke:currentColor; fill:currentColor; stroke-width:1; stroke-linecap:butt }
-        </style>
-        <svg id="render" style="position: absolute; left:0px; top:0px" viewBox="0 0 %.1f %.1f" >]], width, height)}
-
-local index = 2
 local sV, sN, sC = _model.shapes[1], _model.shapes[2], _model.shapes[3]
 local buffer, depth = _model.buffer, _model.depth
 local nd = #depth
+
+
+local result = {format([[<style>
+        #render text { font: 12px sans-serif}
+        #render path{ stroke:#eee}
+        #render line{ stroke:#eee}
+        #render text{ fill:#fff}
+        #render polygon{ stroke:currentColor; fill:currentColor; stroke-width:1; stroke-linecap:butt }
+        </style>
+        <svg id="render" style="position: absolute; left:0px; top:0px" viewBox="0 0 %.1f %.1f" >
+        <text x=6 y=12 >FPS : %.1f</text>
+        <text x=6 y=30 >Mem. : %.1fKB</text>
+        <text x=6 y=48 >Comp. : %.4fms</text>
+        <text x=6 y=66 >Rend. : %.4fms</text>
+        <text x=6 y=84 >Vert. : %d/%d</text>
+        <text x=6 y=102 >Shap. : %d/%d</text>]], width, height, fps, memory, _compTime*1000, _rendTime*1000, _vertexId or 0, #_mesh.vertices[1], #sV, #_mesh.shapes[1])}
 
 
 for i = nd,1,-1 do
@@ -37,7 +43,7 @@ for i = nd,1,-1 do
 
     if n == 2 then
         local v1, v2 = vIds[1], vIds[2]
-        result[index] = format([[<line stroke=rgb(%.0f,%.0f,%.0f) x1=%.1f y1=%.1f x2=%.1f y2=%.1f />]], col[1], col[2], col[3], (1 + X[v1])*w2, (1 + Y[v1])*h2, (1 + X[v2])*w2, (1 + Y[v2])*h2)
+        result[index] = format([[<line x1=%.1f y1=%.1f x2=%.1f y2=%.1f />]], (1 + X[v1])*w2, (1 + Y[v1])*h2, (1 + X[v2])*w2, (1 + Y[v2])*h2)
 
     elseif n == 3 and not isLine then
         local v1, v2, v3 = vIds[1], vIds[2], vIds[3]
@@ -45,42 +51,31 @@ for i = nd,1,-1 do
 
     else
         if isLine then
-            result[index] = format([[<path color=rgb(%.0f,%.0f,%.0f) d="M]], col[1], col[2], col[3])
+            result[index] = format([[<path d="M]], col[1], col[2], col[3])
             for j = 1,n do
                 local id = vIds[j]
 
-                result[index+j] = format('%.1f %.1f' .. (j < n and 'L' or 'Z'), (X[id] +1.0) * w2, (Y[id] +1.0) * h2)
+                if j<n then pattern = '%.1f %.1fL'
+                else pattern = '%.1f %.1fZ' end
+                
+                result[index+j] = format(pattern, (X[id] +1.0) * w2, (Y[id] +1.0) * h2)
             end
             result[index+n] = [["/>]]
-            index = index+n
         else
             result[index] = format([[<polygon color=rgb(%.0f,%.0f,%.0f) points="]], col[1], col[2], col[3])
             for j = 1,n do
                 local id = vId[j]
 
-                result[index+j] = format('%.1f %.1f' .. (j < n and ',' or ''), (X[id] +1.0) * w2, (Y[id] +1.0) * h2)
+                if j<n then pattern = '%.1f %.1f,'
+                else pattern = '%.1f %.1f' end
+                result[index+j] = format(pattern, (X[id] +1.0) * w2, (Y[id] +1.0) * h2)
             end
-            index = index+n
         end
     end
-    index = index+1
+    index = #result+1
 end
 result[index] = '</svg>'
 
+system.setScreen(concat(result))
 
-logRenderTime[#logRenderTime +1] = system.getTime() - t0
-t0 = system.getTime()
-
-local out = (_logRender or '') .. concat(result)
-
-logConcatTime[#logConcatTime +1] = system.getTime() - t0
-t0 = system.getTime()
-
-system.setScreen(out)
-
-logSVGTime[#logSVGTime +1] = system.getTime() - t0
-
-
-if #logRenderTime > 200 then table.remove(logRenderTime, 1) end
-if #logConcatTime > 200 then table.remove(logConcatTime, 1) end
-if #logSVGTime > 200 then table.remove(logSVGTime, 1) end
+_rendTime = system.getTime() - t0
