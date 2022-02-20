@@ -13,10 +13,11 @@ local t0 = getTime()
 local width = _width
 local height = _height
 local vFov = _vFov
+local near, far = _near, _far
 
-local tanFov, field = _tanFov, _field
-local af = _aspectRatio*tanFov
-local nq = _near*field
+local tF, f = _tanFov, _field
+local af = _aspectRatio*tF
+local nq = near*f
 
 
 -- Get camera data
@@ -30,16 +31,22 @@ local up = getCamUp()
 local camUpX, camUpY, camUpZ = up[1], up[2], up[3]
 
 -- Set mesh properties
-local yaw, pitch, roll = 0, 0, 0
+local yaw, pitch, roll = 0.25*t0, 0.25*t0, 0.25*t0
 local oX, oY, oZ = -0.125, 11.875, -0.125
-local scale = 10
+local s = 10
 
 -- Set model
-local nMX, nMY, nMZ = _mesh.normals[1], _mesh.normals[2], _mesh.normals[3]
+local nMX, nMY, nMZ, nN = {},{},{},0
+local nX, nY, nZ = {},{},{}
+if _mesh.normals then
+    nMX, nMY, nMZ = _mesh.normals[1], _mesh.normals[2], _mesh.normals[3]
+    nX, nY, nZ = _model.normals[1], _model.normals[2], _model.normals[3]
+    nN = #nMX
+end
 local vMX, vMY, vMZ = _mesh.vertices[1], _mesh.vertices[2], _mesh.vertices[3]
 local sMV, sMN = _mesh.shapes[1], _mesh.shapes[2]
 
-local nN, nS = #nMX,#sMV
+local nS = #sMV
 _model = {
     vertices = {
         {},
@@ -61,7 +68,6 @@ _model = {
     depth = {}
 }
 local vX, vY, vZ = _model.vertices[1], _model.vertices[2], _model.vertices[3]
-local nX, nY, nZ = _model.normals[1], _model.normals[2], _model.normals[3]
 local sV, sN, sC, sDot = _model.shapes[1], _model.shapes[2], _model.shapes[3], _model.shapes[4]
 local B, D = _model.buffer, _model.depth
 
@@ -70,46 +76,43 @@ local cy, sy = cos(yaw), sin(yaw)
 local cp, sp = cos(pitch), sin(pitch)
 local cr, sr = cos(roll), sin(roll)
 
-local cycp, sycp = cy*cp, sy*cp
-local cyspsr_sycr, syspsr_cycr, cpsr = cy*sp*sr - sy*cr, sy*sp*sr + cy*cr, cp*sr
-local cyspcr_sysr, syspcr_cysr, cpcr = cy*sp*cr + sy*sr, sy*sp*cr - cy*sr, cp*cr
+local crcy, crsy, cpcr, crsp = cr*cy, cr*sy, cp*cr, cr*sp
+local cpsy_cyspsr, cpcy_spsrsy = cp*sy + cy*sp*sr, cp*cy - sp*sr*sy
+local cysp_cpsrsy, spsy_cpcysr = cy*sp + cp*sr*sy, sp*sy - cp*cy*sr
 
 local dX, dY, dZ = oX - camX, oY - camY, oZ - camZ
 
--- Precompute 2
-
-local Mxx, Myx, Mzx, Mwx =              cycp*camRgtX + sycp*camFwdX + (-sp)*camUpX,              cycp*camRgtY + sycp*camFwdY + (-sp)*camUpY,              cycp*camRgtZ + sycp*camFwdZ + (-sp)*camUpZ, dX*camRgtX + dY*camRgtY + dZ*camRgtZ
-local Mxy, Myy, Mzy, Mwy = cyspsr_sycr*camRgtX + syspsr_cycr*camFwdX + cpsr*camUpX, cyspsr_sycr*camRgtY + syspsr_cycr*camFwdY + cpsr*camUpY, cyspsr_sycr*camRgtZ + syspsr_cycr*camFwdZ + cpsr*camUpZ, dX*camFwdX + dY*camFwdY + dZ*camFwdZ
-local Mxz, Myz, Mzz, Mwz = cyspcr_sysr*camRgtX + syspcr_cysr*camFwdX + cpcr*camUpX, cyspcr_sysr*camRgtY + syspcr_cysr*camFwdY + cpcr*camUpY, cyspcr_sysr*camRgtZ + syspcr_cysr*camFwdZ + cpcr*camUpZ,    dX*camUpX + dY*camUpY + dZ*camUpZ
-local Mxw, Myw, Mzw, Mww = 0, 0, 0, 1
-
-local MVxx, MVyx, MVzx, MVwx =      af*Mxx,      af*Myx,      af*Mzx,          af*Mwx
-local MVxy, MVyy, MVzy, MVwy = -tanFov*Mxz, -tanFov*Myz, -tanFov*Mzz,     -tanFov*Mwz
-local MVxz, MVyz, MVzz, MVwz =  -field*Mxy,  -field*Mxy,  -field*Mxy, -field*Mxy + nq
-local MVxw, MVyw, MVzw, MVww =         Mxz,         Myz,         Mzz,             Mwz
-
-local MCVxx, MCVyx, MCVzx, MCVwx =     af*camRgtX,     af*camRgtY,     af*camRgtZ,   0
-local MCVxy, MCVyy, MCVzy, MCVwy = -tanFov*camUpX, -tanFov*camUpY, -tanFov*camUpZ,   0
-local MCVxz, MCVyz, MCVzz, MCVwz = -field*camFwdX, -field*camFwdY, -field*camFwdZ,  nq
-local MCVxw, MCVyw, MCVzw, MCVww =         camUpX,         camUpY,         camUpZ,   0
+-- Precompute matrix
+--Mview*R (for normals)
+local MNxx,MNxy,MNxz, MNyx,MNyy,MNyz, MNzx,MNzy,MNzz
+if _mesh.normals then
+    MNxx, MNxy, MNxz = camRgtX*crcy - camRgtZ*sr - camRgtY*crsy, camRgtX*(cpsy_cyspsr) + camRgtY*(cpcy_spsrsy) + camRgtZ*crsp, camRgtZ*cpcr - camRgtY*(cysp_cpsrsy) - camRgtX*(spsy_cpcysr)
+    MNyx, MNyy, MNyz = camFwdX*crcy - camFwdZ*sr - camFwdY*crsy, camFwdX*(cpsy_cyspsr) + camFwdY*(cpcy_spsrsy) + camFwdZ*crsp, camFwdZ*cpcr - camFwdY*(cysp_cpsrsy) - camFwdX*(spsy_cpcysr)
+    MNzx, MNzy, MNzz =    camUpX*crcy - camUpZ*sr - camUpY*crsy,    camUpX*(cpsy_cyspsr) + camUpY*(cpcy_spsrsy) + camUpZ*crsp,    camUpZ*cpcr - camUpY*(cysp_cpsrsy) - camUpX*(spsy_cpcysr)
+end
+--Mview*T*R*S (for first vertice)
+local Mxx, Mxy, Mxz, Mxw = -s*(camRgtZ*sr - camRgtX*crcy + camRgtY*crsy), s*(camRgtX*(cpsy_cyspsr) + camRgtY*(cpcy_spsrsy) + camRgtZ*crsp), -s*(camRgtX*(spsy_cpcysr) + camRgtY*(cysp_cpsrsy) - camRgtZ*cpcr), camRgtX*dX + camRgtY*dY + camRgtZ*dZ
+local Myx, Myy, Myz, Myw = -s*(camFwdZ*sr - camFwdX*crcy + camFwdY*crsy), s*(camFwdX*(cpsy_cyspsr) + camFwdY*(cpcy_spsrsy) + camFwdZ*crsp), -s*(camFwdX*(spsy_cpcysr) + camFwdY*(cysp_cpsrsy) - camFwdZ*cpcr), camFwdX*dX + camFwdY*dY + camFwdZ*dZ
+local Mzx, Mzy, Mzz, Mzw =    -s*(camUpZ*sr - camUpX*crcy + camUpY*crsy),    s*(camUpX*(cpsy_cyspsr) + camUpY*(cpcy_spsrsy) + camUpZ*crsp),    -s*(camUpX*(spsy_cpcysr) + camUpY*(cysp_cpsrsy) - camUpZ*cpcr),    camUpX*dX + camUpY*dY + camUpZ*dZ
+--Mproj*Mview*Tx*R*S
+local MPxx, MPxy, MPxz, MPxw =         Mxx*af,        Mxy*af,        Mxz*af,          Mxw*af
+local MPyx, MPyy, MPyz, MPyw =        -Mzx*tF,       -Mzy*tF,       -Mzz*tF,         -Mzw*tF
+local MPzx, MPzy, MPzz, MPzw =         -Myx*f,        -Myy*f,        -Myz*f,      nq - Myw*f
 
 -- Compute normals
 for i=1,nN do
-    local nx, ny, nz = nMX[i], nMY[i], nMZ[i]
+    local nx, ny, nz = nMX[i], nMY[i], nMZ[i]    
 
-    --Rotation
-    nX[i] = nx*cycp + ny*sycp + nz*(-sp)
-    nY[i] = nx*cyspsr_sycr + ny*syspsr_cycr + nz*cpsr
-    nZ[i] = nx*cyspcr_sysr + ny*syspcr_cysr + nz*cpcr
+    --Mview*R
+    nX[i] = MNxx*nx + MNxy*ny + MNxz*nz
+    nY[i] = MNyx*nx + MNyy*ny + MNyz*nz
+    nZ[i] = MNzx*nx + MNzy*ny + MNzz*nz
 end
-
 
 -- Compute vertices
 local shapeId = 1
 _vertexId = 0
 
-
-local vx, vy, vz = 0, 0, 0 
 for i = 1,nS do
     local depth, dot = 0, 0
     local vIds, nId = sMV[i], sMN[i]
@@ -118,36 +121,31 @@ for i = 1,nS do
     --# Compute the first vertice position for back-face culling
     if nId then        
         local id = vIds[index]
-
         --Local rotations YAW, PITCH, ROLL & positionning
-        local vxT, vyT, vzT = vMX[id]*scale, vMY[id]*scale, vMZ[id]*scale
+        local vxT, vyT, vzT = vMX[id], vMY[id], vMZ[id]
         
-        local vx = vxT*cycp + vyT*sycp + vzT*(-sp) + dX
-        local vy = vxT*cyspsr_sycr + vyT*syspsr_cycr + vzT*cpsr + dY
-        local vz = vxT*cyspcr_sysr + vyT*syspcr_cysr + vzT*cpcr + dZ
-
+        --Mview*T*R*S
+        local vx = Mxx*vxT + Mxy*vyT + Mxz*vzT + Mxw
+        local vy = Myx*vxT + Myy*vyT + Myz*vzT + Myw
+        local vz = Mzx*vxT + Mzy*vyT + Mzz*vzT + Mzw
+        
         -- Compute dot product with normal
         local len = (vx*vx+vy*vy+vz*vz)^(-0.5)
-        dot = vx*len*nMX[nId] + vy*len*nMY[nId] + vz*len*nMZ[nId]
+        dot = vx*len*nX[nId] + vy*len*nY[nId] + vz*len*nZ[nId]
         sDot[nId] = dot
 
         if dot >= 0 then goto skipShape end
+        if vy < near or vy > far then goto skipShape end
 
         if vX[id] then
             vz = vZ[id]
         else
-            --Project camera referential
-            vxT, vyT, vzT = vx, vy, vz
-
-            vy = vxT * camFwdX + vyT * camFwdY + vzT * camFwdZ
-            if vy < 0.01 then goto skipShape end
             local ivy = 1/vy
-            
-            --Project vertice from 3D -> 2D
-            --Matrix Proj.View
-            vX[id] = (vxT * MCVxx + vyT * MCVyx + vzT * MCVzx + MCVwx)*ivy 
-            vY[id] = (vxT * MCVxy + vyT * MCVyy + vzT * MCVzy + MCVwy)*ivy 
-            vz = (vxT * MCVxz + vyT * MCVyz + vzT * MCVzz + MCVwz)*ivy 
+            --Project vertice from 3D -> 2D            
+            --Mproj
+            vX[id] = (af*vx)*ivy
+            vY[id] = (-tF*vz)*ivy
+            vz =     (-f*vy + nq)*ivy
             vZ[id] = vz
             
             _vertexId = _vertexId +1
@@ -164,21 +162,20 @@ for i = 1,nS do
             vz = vZ[id]
         else
             --Compute this vertice
-            vx, vy, vz = vMX[id]*scale, vMY[id]*scale, vMZ[id]*scale
-            local vxT, vyT, vzT = vx, vy, vz
+            local vxT, vyT, vzT = vMX[id], vMY[id], vMZ[id]
             
             --Local rotations YAW, PITCH, ROLL & Positionning & Projection to camera 
-            --Matrix View.Trans
-            vy = vxT * Mxy + vyT * Myy + vzT * Mzy + Mwy
-            if vy < 0.01 then goto skipShape end
+            --Mview*Tx*R*S
+            local vy = Myx*vxT + Myy*vyT + Myz*vzT + Myw
+            if vy < near or vy > far then goto skipShape end
 
             --Project vertice from 3D -> 2D
-            --Matrix Proj.View  
             local ivy = 1/vy
             
-            vX[id] = (vxT * MVxx + vyT * MVyx + vzT * MVzx + MVwx)*ivy 
-            vY[id] = (vxT * MVxy + vyT * MVyy + vzT * MVzy + MVwy)*ivy 
-            vz = (vxT * MVxz + vyT * MVyz + vzT * MVzz + MVwz)*ivy 
+            --Mproj*Mview*Tx*R*S.*V
+            vX[id] = (MPxx*vxT + MPxy*vyT + MPxz*vzT + MPxw)*ivy
+            vY[id] = (MPyx*vxT + MPyy*vyT + MPyz*vzT + MPyw)*ivy
+            vz = (MPzx*vxT + MPzy*vyT + MPzz*vzT + MPzw)*ivy
             vZ[id] = vz
             
             _vertexId = _vertexId +1            
